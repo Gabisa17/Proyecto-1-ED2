@@ -1,0 +1,287 @@
+#include <Arduino.h>
+#include "driver/ledc.h"
+//Interrupciones 
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+//Entradas display 
+#define D1 32
+#define D2 26
+#define D3 27
+//Partes display
+#define A 33
+#define F 25
+#define B 14
+#define P 12
+#define E 15
+#define D 2
+#define C 4
+#define G 5
+//Leds
+#define L_roj 22
+#define L_nar 21
+#define L_ver 18 
+//Servo 
+#define servo 19
+int servoPosition [] = {53, 77, 103};
+int y = 0; 
+//Canales PWM
+#define canalPWMser 6
+#define canalPWMroj 7
+#define canalPWMnar 8
+#define canalPWMver 9 
+//frecuencia 
+#define freqPWMser 50
+#define freqPWMroj 50
+#define freqPWMnar 50
+#define freqPWMver 50
+//resolución
+#define resPWMser 10
+#define resPWMroj 10
+#define resPWMnar 10
+#define resPWMver 10
+//Sensor
+#define temp 34
+int valorTemp = 0;
+int mapTemp = 0; 
+int temperatura = 0;
+int centena = 0;
+int decena = 0;
+int unidad = 0;
+//definición botón para subir información
+struct Bot { 
+  const uint8_t boton_Sub;
+  bool pressed;
+  bool lastState; 
+};
+Bot Sub = {23, false, false};
+//interrupción para el botón 
+void IRAM_ATTR handle_Sub(){
+  portENTER_CRITICAL_ISR(&mux);
+  Sub.pressed = true;
+  portEXIT_CRITICAL_ISR(&mux);
+}
+void initPWMser(void);
+void initPWMroj(void);
+void initPWMnar(void);
+void initPWMver(void);
+
+void display(int x);
+
+void setup(){
+Serial.begin(115200);
+//Iniciar PWM 
+initPWMser();
+initPWMroj();
+initPWMnar();
+initPWMver();
+//Boton
+pinMode(Sub.boton_Sub, INPUT_PULLUP);
+attachInterrupt(Sub.boton_Sub, handle_Sub, RISING);
+//partes display salidas
+pinMode (A, OUTPUT);
+pinMode (F, OUTPUT);
+pinMode (B, OUTPUT);
+pinMode (P, OUTPUT);
+pinMode (E, OUTPUT);
+pinMode (D, OUTPUT);
+pinMode (C, OUTPUT);
+pinMode (G, OUTPUT);
+pinMode (D1, OUTPUT);
+pinMode (D2, OUTPUT);
+pinMode (D3, OUTPUT);
+//partes display inicio
+digitalWrite(A, LOW);
+digitalWrite(F, LOW);
+digitalWrite(B, LOW);
+digitalWrite(P, LOW);
+digitalWrite(E, LOW);
+digitalWrite(D, LOW);
+digitalWrite(C, LOW);
+digitalWrite(G, LOW);
+}
+
+void loop() {
+//mapear sensor
+  valorTemp = analogRead(temp);
+  mapTemp = map(valorTemp, 0, 4095, 30, 40);
+//leer valor del sensor
+  //int tempValor = analogRead(mapTemp);
+//Convertir de Voltaje a celsius
+  //float voltage = tempValor * (3.3 / 4095.0); // Para el ESP32, la referencia de voltaje es 3.3V y el ADC es de 12 bits
+  //float temp_final = voltage * 100.0; // LM35 da 10mV por grado Celsius
+float tempRound = round(mapTemp * 10) / 10;
+temperatura = tempRound * 10;
+centena = temperatura / 100;       // Extrae las centenas
+decena = (temperatura / 10) % 10;     // Extrae las decenas
+unidad = temperatura % 10;
+//Condiciones de temperatura para las alertas o leds de los tres distintos colores
+if(Sub.pressed != Sub.lastState){
+    if (Sub.pressed) {
+      if( mapTemp < 37){
+        ledcWrite(canalPWMroj, 0);
+        ledcWrite(canalPWMnar, 0);
+        ledcWrite(canalPWMver, 1023);
+        ledcWrite(canalPWMser, 53);
+        y=0;
+      }
+      else if(mapTemp >= 37 && mapTemp <= 37.5){
+        ledcWrite(canalPWMroj, 0);
+        ledcWrite(canalPWMnar, 1023);
+        ledcWrite(canalPWMver, 0);
+        ledcWrite(canalPWMser, 77);
+        y=1;
+      }
+      else{
+        ledcWrite(canalPWMroj, 1023);
+        ledcWrite(canalPWMnar, 0);
+        ledcWrite(canalPWMver, 0);
+        ledcWrite(canalPWMser, 103);
+        y=2;
+      }
+      Sub.pressed = false;
+    }
+    Sub.lastState = Sub.pressed;
+  }
+//Serial.println(Sub.pressed);
+Serial.printf("centena= %u, decene: %u, unidad: %u \n", centena, decena, unidad);
+//Mostrar cada uno de los números en el display
+digitalWrite(D1, HIGH);
+digitalWrite(D2, LOW);
+digitalWrite(D3, LOW);
+digitalWrite(P, LOW);
+display(centena);
+delay(5);
+
+digitalWrite(D1, LOW);
+digitalWrite(D2, HIGH);
+digitalWrite(D3, LOW);
+digitalWrite(P, HIGH);
+display(decena);
+delay(5);
+
+digitalWrite(D1, LOW);
+digitalWrite(D2, LOW);
+digitalWrite(D3, HIGH);
+digitalWrite(P, LOW);
+display(unidad);
+delay(5);
+}
+void initPWMser(void){
+  ledcSetup(canalPWMser, freqPWMser, resPWMser);
+  ledcAttachPin(servo, canalPWMser);
+}
+void initPWMroj(void){
+  ledcSetup(canalPWMroj, freqPWMroj, resPWMroj);
+  ledcAttachPin(L_roj, canalPWMroj);
+}
+void initPWMver(void){
+  ledcSetup(canalPWMver, freqPWMver, resPWMver);
+  ledcAttachPin(L_ver, canalPWMver);
+}
+void initPWMnar(void){
+  ledcSetup(canalPWMnar, freqPWMnar, resPWMnar);
+  ledcAttachPin(L_nar, canalPWMnar);
+}
+//función que llama a los cases de cada número para imprimirlo en el display
+void display(int x){
+  switch(x){
+   case 0:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, HIGH);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, LOW);
+      break;
+    case 1:
+      digitalWrite(A, LOW);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, LOW);
+      digitalWrite(E, LOW);
+      digitalWrite(F, LOW);
+      digitalWrite(G, LOW);
+      break;
+    case 2:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, LOW);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, HIGH);
+      digitalWrite(F, LOW);
+      digitalWrite(G, HIGH);
+      break;
+    case 3:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, LOW);
+      digitalWrite(F, LOW);
+      digitalWrite(G, HIGH);
+      break;
+    case 4:
+      digitalWrite(A, LOW);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, LOW);
+      digitalWrite(E, LOW);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+    case 5:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, LOW);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, LOW);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+    case 6:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, LOW);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, HIGH);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+    case 7:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, LOW);
+      digitalWrite(E, LOW);
+      digitalWrite(F, LOW);
+      digitalWrite(G, LOW);
+      break;
+    case 8:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, HIGH);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+    case 9:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, HIGH);
+      digitalWrite(E, LOW);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+    case 10:
+      digitalWrite(A, HIGH);
+      digitalWrite(B, HIGH);
+      digitalWrite(C, HIGH);
+      digitalWrite(D, LOW);
+      digitalWrite(E, HIGH);
+      digitalWrite(F, HIGH);
+      digitalWrite(G, HIGH);
+      break;
+  }
+}
