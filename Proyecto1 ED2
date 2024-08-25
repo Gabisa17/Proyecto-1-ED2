@@ -24,7 +24,6 @@ AdafruitIO_Feed *tempCanal = io.feed("temperatura");
 #define L_ver 18 
 //Servo 
 #define servo 19
-int servoPosition [] = {53, 77, 103};
 int y = 0; 
 //Canales PWM
 #define canalPWMser 6
@@ -43,8 +42,9 @@ int y = 0;
 #define resPWMver 10
 //Sensor
 #define temp 34
+//Variables utilizadas en funciones
+//int mapTemp = 0; //Utilizado para comprobar funcionamiento con potenciometro
 int valorTemp = 0;
-int mapTemp = 0; 
 int temperatura = 0;
 int centena = 0;
 int decena = 0;
@@ -124,9 +124,9 @@ void loop() {
 //Convertir de Voltaje a celsius
 float voltage = tempValor * (3.3 / 4095.0); // Para el ESP32, la referencia de voltaje es 3.3V y el ADC es de 12 bits
 float temp_final = voltage * 100.0; // LM35 da 10mV por grado Celsius
+float tempRound = round(temp_final * 10) / 10; // redondea el valor a un decimal
 //lee los valores por separado y extrae cada número para cada display
-float tempRound = round(temp_final * 10) / 10;
-temperatura = tempRound * 10;
+temperatura = tempRound * 10; //quita el decimal y lo vuelve un número completo
 centena = temperatura / 100;       // Extrae las centenas
 decena = (temperatura / 10) % 10;     // Extrae las decenas
 unidad = temperatura % 10;
@@ -134,14 +134,14 @@ unidad = temperatura % 10;
 if(Sub.pressed != Sub.lastState){
     if (Sub.pressed) {
       io.run();
-      if( temp_final < 37){
+      if( tempRound < 37){
         ledcWrite(canalPWMroj, 0);
         ledcWrite(canalPWMnar, 0);
         ledcWrite(canalPWMver, 1023);
         ledcWrite(canalPWMser, 103);
         y=0;
       }
-      else if(temp_final >= 37 && temp_final <= 37.5){
+      else if(tempRound >= 37 && tempRound <= 37.5){
         ledcWrite(canalPWMroj, 0);
         ledcWrite(canalPWMnar, 1023);
         ledcWrite(canalPWMver, 0);
@@ -156,7 +156,7 @@ if(Sub.pressed != Sub.lastState){
         y=2;
       }
       //subir valor de temperatura en Adafruit
-      tempCanal->save(temp_final);
+      tempCanal->save(tempRound);
       Sub.pressed = false;
     }
     Sub.lastState = Sub.pressed;
@@ -296,15 +296,6 @@ void display(int x){
       digitalWrite(C, HIGH);
       digitalWrite(D, HIGH);
       digitalWrite(E, LOW);
-      digitalWrite(F, HIGH);
-      digitalWrite(G, HIGH);
-      break;
-    case 10:
-      digitalWrite(A, HIGH);
-      digitalWrite(B, HIGH);
-      digitalWrite(C, HIGH);
-      digitalWrite(D, LOW);
-      digitalWrite(E, HIGH);
       digitalWrite(F, HIGH);
       digitalWrite(G, HIGH);
       break;
