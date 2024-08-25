@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include "driver/ledc.h"
+#include "config.h"
 //Interrupciones 
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+//Adafruit
+AdafruitIO_Feed *tempCanal = io.feed("temperatura");
 //Entradas display 
 #define D1 32
 #define D2 26
@@ -59,15 +62,27 @@ void IRAM_ATTR handle_Sub(){
   Sub.pressed = true;
   portEXIT_CRITICAL_ISR(&mux);
 }
+// definición funciones
 void initPWMser(void);
 void initPWMroj(void);
 void initPWMnar(void);
 void initPWMver(void);
-
 void display(int x);
 
 void setup(){
 Serial.begin(115200);
+// wait for serial monitor to open
+while(! Serial);
+Serial.print("Connecting to Adafruit IO");
+// connect to io.adafruit.com
+io.connect();
+// wait for a connection
+while(io.status() < AIO_CONNECTED) {
+  Serial.print(".");
+  delay(500);
+// we are connected
+Serial.println();
+Serial.println(io.statusText());
 //Iniciar PWM 
 initPWMser();
 initPWMroj();
@@ -98,17 +113,19 @@ digitalWrite(D, LOW);
 digitalWrite(C, LOW);
 digitalWrite(G, LOW);
 }
+}
 
 void loop() {
-//mapear sensor
-  valorTemp = analogRead(temp);
-  mapTemp = map(valorTemp, 0, 4095, 30, 40);
+//mapeao potenciometro, utilizado para probar que todos los valores y opciones funcionaran bien.
+  //valorTemp = analogRead(temp);
+  //mapTemp = map(valorTemp, 0, 4095, 30, 40);
 //leer valor del sensor
-  //int tempValor = analogRead(mapTemp);
+  int tempValor = analogRead(temp);
 //Convertir de Voltaje a celsius
-  //float voltage = tempValor * (3.3 / 4095.0); // Para el ESP32, la referencia de voltaje es 3.3V y el ADC es de 12 bits
-  //float temp_final = voltage * 100.0; // LM35 da 10mV por grado Celsius
-float tempRound = round(mapTemp * 10) / 10;
+float voltage = tempValor * (3.3 / 4095.0); // Para el ESP32, la referencia de voltaje es 3.3V y el ADC es de 12 bits
+float temp_final = voltage * 100.0; // LM35 da 10mV por grado Celsius
+//lee los valores por separado y extrae cada número para cada display
+float tempRound = round(temp_final * 10) / 10;
 temperatura = tempRound * 10;
 centena = temperatura / 100;       // Extrae las centenas
 decena = (temperatura / 10) % 10;     // Extrae las decenas
@@ -116,14 +133,15 @@ unidad = temperatura % 10;
 //Condiciones de temperatura para las alertas o leds de los tres distintos colores
 if(Sub.pressed != Sub.lastState){
     if (Sub.pressed) {
-      if( mapTemp < 37){
+      io.run();
+      if( temp_final < 37){
         ledcWrite(canalPWMroj, 0);
         ledcWrite(canalPWMnar, 0);
         ledcWrite(canalPWMver, 1023);
-        ledcWrite(canalPWMser, 53);
+        ledcWrite(canalPWMser, 103);
         y=0;
       }
-      else if(mapTemp >= 37 && mapTemp <= 37.5){
+      else if(temp_final >= 37 && temp_final <= 37.5){
         ledcWrite(canalPWMroj, 0);
         ledcWrite(canalPWMnar, 1023);
         ledcWrite(canalPWMver, 0);
@@ -134,15 +152,18 @@ if(Sub.pressed != Sub.lastState){
         ledcWrite(canalPWMroj, 1023);
         ledcWrite(canalPWMnar, 0);
         ledcWrite(canalPWMver, 0);
-        ledcWrite(canalPWMser, 103);
+        ledcWrite(canalPWMser, 53);
         y=2;
       }
+      //subir valor de temperatura en Adafruit
+      tempCanal->save(temp_final);
       Sub.pressed = false;
     }
     Sub.lastState = Sub.pressed;
   }
 //Serial.println(Sub.pressed);
-Serial.printf("centena= %u, decene: %u, unidad: %u \n", centena, decena, unidad);
+//Serial.printf("centena= %u, decena: %u, unidad: %u \n", centena, decena, unidad); (UTILIZADOS PARA COMPROBAR EL FUNCIONAMIENTO)
+
 //Mostrar cada uno de los números en el display
 digitalWrite(D1, HIGH);
 digitalWrite(D2, LOW);
@@ -164,7 +185,11 @@ digitalWrite(D3, HIGH);
 digitalWrite(P, LOW);
 display(unidad);
 delay(5);
+
+//Serial.printf("temperatura=%u  y=%u\n", temp_final, y); //(se usó para verificar el funcionamiento)
 }
+
+//Funciones PMW
 void initPWMser(void){
   ledcSetup(canalPWMser, freqPWMser, resPWMser);
   ledcAttachPin(servo, canalPWMser);
